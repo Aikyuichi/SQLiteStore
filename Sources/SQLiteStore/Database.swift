@@ -80,8 +80,10 @@ public class Database {
     
     public func prepareStatement(_ query: String, execute code: (Statement) throws -> Void) throws {
         let stmt = try prepareStatement(query)
+        defer {
+            stmt.finalize()
+        }
         try code(stmt)
-        stmt.finalize()
     }
     
     public func executeQuery(_ query: String) throws {
@@ -89,75 +91,65 @@ public class Database {
         if sqlite3_exec(self.sqlite, query, nil, nil, &error) != SQLITE_OK {
             self.rollbackTransaction = true
             if let error {
-                throw sqliteError(message: String(cString: error), query: query) //SQLiteError(code: Int(sqlite3_errcode(self.sqlite)), message: String(cString: error))
+                throw sqliteError(message: String(cString: error), query: query)
             }
             sqlite3_free(error)
         }
     }
     
     public func executeStatement(_ query: String, parameters: [Any?]) throws {
-        let stmt = try prepareStatement(query)
-        if let parameters = parameters as? [[String: Any?]] {
-            for row in parameters {
-                for parameter in row {
-                    try stmt.bindValue(parameter.value, forName: parameter.key)
+        try prepareStatement(query) { stmt in
+            if let parameters = parameters as? [[String: Any?]] {
+                for row in parameters {
+                    for parameter in row {
+                        try stmt.bindValue(parameter.value, forName: parameter.key)
+                    }
+                    try stmt.step()
+                    try stmt.reset()
                 }
+            } else if let parameters = parameters as? [[Any?]] {
+                for row in parameters {
+                    try bindParameters(stmt: stmt, parameters: row)
+                    try stmt.step()
+                    try stmt.reset()
+                }
+            } else {
+                try bindParameters(stmt: stmt, parameters: parameters)
                 try stmt.step()
-                try stmt.reset()
             }
-        } else if let parameters = parameters as? [[Any?]] {
-            for row in parameters {
-                try bindParameters(stmt: stmt, parameters: row)
-                try stmt.step()
-                try stmt.reset()
-            }
-        } else {
-            try bindParameters(stmt: stmt, parameters: parameters)
-            try stmt.step()
         }
-        stmt.finalize()
     }
     
     public func executeStatement(_ query: String, parameters: [String: Any?]) throws {
-        let stmt = try prepareStatement(query)
-        for parameter in parameters {
-            try stmt.bindValue(parameter.value, forName: parameter.key)
+        try prepareStatement(query) { stmt in
+            for parameter in parameters {
+                try stmt.bindValue(parameter.value, forName: parameter.key)
+            }
+            try stmt.step()
         }
-        try stmt.step()
-        stmt.finalize()
     }
     
     public func select(_ query: String, parameters: [Any?] = []) throws -> [[String: Any?]] {
         var result: [[String: Any]] = []
-        let stmt = try prepareStatement(query)
-        try bindParameters(stmt: stmt, parameters: parameters)
-        while try stmt.step() {
-            var row: [String: Any] = [:]
-            for i in 0..<stmt.columnCount {
-                let columnName = stmt.getColumnName(forIndex: i)
-                row[columnName] = stmt.getValue(forIndex: i)
+        try prepareStatement(query) { stmt in
+            try bindParameters(stmt: stmt, parameters: parameters)
+            while let row = stmt.fetch() {
+                result.append(row)
             }
-            result.append(row)
         }
-        stmt.finalize()
         return result
     }
     
-    public func select(_ query: String, parameters: [String: Any?] = [:]) throws -> [[String: Any?]] {
+    public func select(_ query: String, parameters: [String: Any?]) throws -> [[String: Any?]] {
         var result: [[String: Any]] = []
-        let stmt = try prepareStatement(query)
-        for parameter in parameters {
-            try stmt.bindValue(parameter.value, forName: parameter.key)
-        }
-        while try stmt.step() {
-            var row: [String: Any] = [:]
-            for i in 0..<stmt.columnCount {
-                let columnName = stmt.getColumnName(forIndex: i)
-                row[columnName] = stmt.getValue(forIndex: i)
+        try prepareStatement(query) { stmt in
+            for parameter in parameters {
+                try stmt.bindValue(parameter.value, forName: parameter.key)
             }
-            result.append(row)
+            while let row = stmt.fetch() {
+                result.append(row)
+            }
         }
-        stmt.finalize()
         return result
     }
     

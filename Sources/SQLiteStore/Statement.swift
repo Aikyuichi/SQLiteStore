@@ -67,12 +67,15 @@ public class Statement {
         } else if stepResult != SQLITE_DONE {
             self.failed = true
             self.rollback()
-            throw sqliteError()
+            throw sqliteError(code: Int(stepResult))
         }
         return result
     }
     
-    public func reset() throws {
+    public func reset(includingBindings: Bool = false) throws {
+        if includingBindings {
+            sqlite3_clear_bindings(self.sqliteStatement)
+        }
         if sqlite3_reset(self.sqliteStatement) != SQLITE_OK {
             throw sqliteError()
         }
@@ -296,6 +299,18 @@ public class Statement {
         return nil
     }
     
+    public func fetch() -> [String: Any?]? {
+        if (try? step()) ?? false {
+            var result: [String: Any?] = [:]
+            for i in 0..<self.columnCount {
+                let columnName = getColumnName(forIndex: i)
+                result[columnName] = getValue(forIndex: i)
+            }
+            return result
+        }
+        return nil
+    }
+    
     private func isColumnNULL(forIndex index: Int32) -> Bool {
         sqlite3_column_type(self.sqliteStatement, index) == SQLITE_NULL
     }
@@ -309,9 +324,9 @@ public class Statement {
         throw sqliteError()
     }
     
-    private func sqliteError() -> SQLiteError {
+    private func sqliteError(code: Int? = nil) -> SQLiteError {
         let error = SQLiteError(
-            code: Int(sqlite3_errcode(self.sqlite)),
+            code: code ?? Int(sqlite3_errcode(self.sqlite)),
             message: "\(String(cString: sqlite3_errmsg(self.sqlite)))\n\(self.query)"
         )
         #if DEBUG
