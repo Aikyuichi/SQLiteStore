@@ -62,7 +62,7 @@ public class Database {
             print("Rollback transaction")
             #endif
         } else {
-            try self.executeQuery("COMMIT")
+            try executeQuery("COMMIT")
         }
         self.openTransaction = false
         self.rollbackTransaction = false
@@ -101,20 +101,18 @@ public class Database {
         try prepareStatement(query) { stmt in
             if let parameters = parameters as? [[String: Any?]] {
                 for row in parameters {
-                    for parameter in row {
-                        try stmt.bindValue(parameter.value, forName: parameter.key)
-                    }
+                    try stmt.bind(parameters: row)
                     try stmt.step()
                     try stmt.reset()
                 }
             } else if let parameters = parameters as? [[Any?]] {
                 for row in parameters {
-                    try bindParameters(stmt: stmt, parameters: row)
+                    try stmt.bind(parameters: row)
                     try stmt.step()
                     try stmt.reset()
                 }
             } else {
-                try bindParameters(stmt: stmt, parameters: parameters)
+                try stmt.bind(parameters: parameters)
                 try stmt.step()
             }
         }
@@ -122,9 +120,7 @@ public class Database {
     
     public func executeStatement(_ query: String, parameters: [String: Any?]) throws {
         try prepareStatement(query) { stmt in
-            for parameter in parameters {
-                try stmt.bindValue(parameter.value, forName: parameter.key)
-            }
+            try stmt.bind(parameters: parameters)
             try stmt.step()
         }
     }
@@ -132,7 +128,7 @@ public class Database {
     public func select(_ query: String, parameters: [Any?] = []) throws -> [[String: Any?]] {
         var result: [[String: Any]] = []
         try prepareStatement(query) { stmt in
-            try bindParameters(stmt: stmt, parameters: parameters)
+            try stmt.bind(parameters: parameters)
             while let row = stmt.fetch() {
                 result.append(row)
             }
@@ -143,9 +139,7 @@ public class Database {
     public func select(_ query: String, parameters: [String: Any?]) throws -> [[String: Any?]] {
         var result: [[String: Any]] = []
         try prepareStatement(query) { stmt in
-            for parameter in parameters {
-                try stmt.bindValue(parameter.value, forName: parameter.key)
-            }
+            try stmt.bind(parameters: parameters)
             while let row = stmt.fetch() {
                 result.append(row)
             }
@@ -157,10 +151,25 @@ public class Database {
         return try select(query, parameters: parameters).first
     }
     
+    public func selectFirst(_ query: String, parameters: [String: Any?]) throws -> [String: Any?]? {
+        return try select(query, parameters: parameters).first
+    }
+    
     public func selectBool(_ query: String, parameters: [Any?] = []) throws -> Bool? {
         var scalar: Bool? = nil
         try prepareStatement(query) { stmt in
-            try bindParameters(stmt: stmt, parameters: parameters)
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getBool(forIndex: 0)
+            }
+        }
+        return scalar
+    }
+    
+    public func selectBool(_ query: String, parameters: [String: Any?]) throws -> Bool? {
+        var scalar: Bool? = nil
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
             if try stmt.step() {
                 scalar = stmt.getBool(forIndex: 0)
             }
@@ -171,7 +180,18 @@ public class Database {
     public func selectDouble(_ query: String, parameters: [Any?] = []) throws -> Double? {
         var scalar: Double? = nil
         try prepareStatement(query) { stmt in
-            try bindParameters(stmt: stmt, parameters: parameters)
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getDouble(forIndex: 0)
+            }
+        }
+        return scalar
+    }
+    
+    public func selectDouble(_ query: String, parameters: [String: Any?]) throws -> Double? {
+        var scalar: Double? = nil
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
             if try stmt.step() {
                 scalar = stmt.getDouble(forIndex: 0)
             }
@@ -182,7 +202,18 @@ public class Database {
     public func selectInt(_ query: String, parameters: [Any?] = []) throws -> Int? {
         var scalar: Int? = nil
         try prepareStatement(query) { stmt in
-            try bindParameters(stmt: stmt, parameters: parameters)
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getInt(forIndex: 0)
+            }
+        }
+        return scalar
+    }
+    
+    public func selectInt(_ query: String, parameters: [String: Any?]) throws -> Int? {
+        var scalar: Int? = nil
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
             if try stmt.step() {
                 scalar = stmt.getInt(forIndex: 0)
             }
@@ -193,7 +224,18 @@ public class Database {
     public func selectString(_ query: String, parameters: [Any?] = []) throws -> String? {
         var scalar: String? = nil
         try prepareStatement(query) { stmt in
-            try bindParameters(stmt: stmt, parameters: parameters)
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getString(forIndex: 0)
+            }
+        }
+        return scalar
+    }
+    
+    public func selectString(_ query: String, parameters: [String: Any?]) throws -> String? {
+        var scalar: String? = nil
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
             if try stmt.step() {
                 scalar = stmt.getString(forIndex: 0)
             }
@@ -223,25 +265,18 @@ public class Database {
         self.isOpen = true
     }
     
-    private func bindParameters(stmt: Statement, parameters: [Any?]) throws {
-        for i in 0..<parameters.count {
-            let parameter = parameters[i]
-            try stmt.bindValue(parameter, forIndex: Int32(i + 1))
-        }
-    }
-    
     private func checkSchemaAlreadyExists(schema: String) throws -> Bool {
         return try selectBool("SELECT 1 FROM pragma_database_list WHERE name = ?", parameters: [schema]) ?? false
     }
     
-    private func sqliteError(message: String = "", query: String = "") -> SQLiteError {
-        var message = message
-        if message.isEmpty {
-            message = String(cString: sqlite3_errmsg(self.sqlite))
+    private func sqliteError(message: String? = nil, query: String? = nil) -> SQLiteError {
+        var message = message ?? String(cString: sqlite3_errmsg(self.sqlite))
+        if let query {
+            message.append("\n\(query)")
         }
         let error = SQLiteError(
             code: Int(sqlite3_errcode(self.sqlite)),
-            message: "\(message)\n\(query)"
+            message: message
         )
         #if DEBUG
         print(error)

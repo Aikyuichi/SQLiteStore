@@ -25,15 +25,12 @@ class Store {
     }
     
     func get(dbKey: String) -> Database? {
-        do {
-            if self.databases[dbKey] == nil {
-                if let db = try? Database.open(self.assets[dbKey]?.dbPath ?? "") {
-                    self.databases[dbKey] = db
-                }
+        if self.databases[dbKey] == nil {
+            if let db = try? Database.open(self.assets[dbKey]?.dbPath ?? "") {
+                self.databases[dbKey] = db
             }
-            return self.databases[dbKey]!
         }
-        return nil
+        return self.databases[dbKey]
     }
     
     func getPath(dbKey: String) -> String {

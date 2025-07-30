@@ -13,6 +13,7 @@ extension Database {
         Store.shared.add(dbKey: key, dbPath: path, attachements: attachements, defaultDb: defaultDb)
     }
     
+    #if os(iOS)
     static public func register(fromMainBundleWithName name: String, forKey key: String, attachements: [String: String] = [:], copyToDocumentDirectory copy: Bool = false, default defaultDb: Bool = false) {
         let url = NSURL(fileURLWithPath: name)
         let dbPath = Bundle.main.path(forResource: url.deletingPathExtension?.lastPathComponent, ofType: url.pathExtension)!
@@ -28,13 +29,16 @@ extension Database {
             self.register(path: dbPath, forKey: key, attachements: attachements, default: defaultDb)
         }
     }
+    #endif
     
+    #if os(iOS)
     static public func register(fromDocumentDirectoryWithName name: String, forKey key: String, attachements: [String: String] = [:], default defaultDb: Bool = false) {
         if let documentPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first {
             let dbPath = (documentPath as NSString).appendingPathComponent(name)
             self.register(path: dbPath, forKey: key, attachements: attachements, default: defaultDb)
         }
     }
+    #endif
     
     static public func unregister(forkey key: String) {
         Store.shared.remove(dbKey: key)
