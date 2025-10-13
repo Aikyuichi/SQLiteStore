@@ -11,14 +11,14 @@ import Foundation
 class Store {
     static let shared = Store()
     
-    private var assets: [String: (dbPath: String, attachements: [String: String])] = [:]
+    private var assets: [String: (dbPath: String, attachements: [String: String], readonly: Bool)] = [:]
     private var databases: [String: Database] = [:]
     private var defaultDbKey = ""
     
     private init() { }
     
-    func add(dbKey: String, dbPath: String, attachements: [String: String], defaultDb: Bool) {
-        self.assets[dbKey] = (dbPath: dbPath, attachements: attachements)
+    func add(dbKey: String, dbPath: String, attachements: [String: String], readonlyDb: Bool, defaultDb: Bool) {
+        self.assets[dbKey] = (dbPath: dbPath, attachements: attachements, readonlyDb)
         if defaultDb {
             self.defaultDbKey = dbKey
         }
@@ -26,7 +26,11 @@ class Store {
     
     func get(dbKey: String) -> Database? {
         if self.databases[dbKey] == nil {
-            if let db = try? Database.open(self.assets[dbKey]?.dbPath ?? "") {
+            if let db = try? Database.open(self.assets[dbKey]?.dbPath ?? "", readonly: self.assets[dbKey]?.readonly ?? false) {
+                let attachements = getAttachements(dbKey: dbKey)
+                for (schema, dbKey) in attachements {
+                    try? db.attach(databaseAtPath: getPath(dbKey: dbKey), withSchema: schema)
+                }
                 self.databases[dbKey] = db
             }
         }

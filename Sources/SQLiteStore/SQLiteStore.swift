@@ -9,12 +9,12 @@
 import Foundation
 
 extension Database {
-    static public func register(path: String, forKey key: String, attachements: [String: String] = [:], default defaultDb: Bool = false) {
-        Store.shared.add(dbKey: key, dbPath: path, attachements: attachements, defaultDb: defaultDb)
+    static public func register(path: String, forKey key: String, attachements: [String: String] = [:], readonly: Bool = false, default defaultDb: Bool = false) {
+        Store.shared.add(dbKey: key, dbPath: path, attachements: attachements, readonlyDb: readonly, defaultDb: defaultDb)
     }
     
     #if os(iOS)
-    static public func register(fromMainBundleWithName name: String, forKey key: String, attachements: [String: String] = [:], copyToDocumentDirectory copy: Bool = false, default defaultDb: Bool = false) {
+    static public func register(fromMainBundleWithName name: String, forKey key: String, attachements: [String: String] = [:], copyToDocumentDirectory copy: Bool = false, readonly: Bool = false, default defaultDb: Bool = false) {
         let url = NSURL(fileURLWithPath: name)
         let dbPath = Bundle.main.path(forResource: url.deletingPathExtension?.lastPathComponent, ofType: url.pathExtension)!
         if copy {
@@ -23,19 +23,19 @@ extension Database {
                 if !FileManager.default.fileExists(atPath: dbPathTo) {
                     try! FileManager.default.copyItem(atPath: dbPath, toPath: dbPathTo)
                 }
-                self.register(path: dbPathTo, forKey: key, attachements: attachements, default: defaultDb)
+                self.register(path: dbPathTo, forKey: key, attachements: attachements, readonly: readonly, default: defaultDb)
             }
         } else {
-            self.register(path: dbPath, forKey: key, attachements: attachements, default: defaultDb)
+            self.register(path: dbPath, forKey: key, attachements: attachements, readonly: readonly, default: defaultDb)
         }
     }
     #endif
     
     #if os(iOS)
-    static public func register(fromDocumentDirectoryWithName name: String, forKey key: String, attachements: [String: String] = [:], default defaultDb: Bool = false) {
+    static public func register(fromDocumentDirectoryWithName name: String, forKey key: String, attachements: [String: String] = [:], readonly: Bool = false, default defaultDb: Bool = false) {
         if let documentPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first {
             let dbPath = (documentPath as NSString).appendingPathComponent(name)
-            self.register(path: dbPath, forKey: key, attachements: attachements, default: defaultDb)
+            self.register(path: dbPath, forKey: key, attachements: attachements, readonly: readonly, default: defaultDb)
         }
     }
     #endif
@@ -46,11 +46,12 @@ extension Database {
     
     static public func get() -> Database? {
         let key = Store.shared.getDefaultDbKey()
-        return Store.shared.get(dbKey: key)
+        return get(forKey: key)
     }
     
     static public func get(forKey key: String) -> Database? {
-        return Store.shared.get(dbKey: key)
+        let db = Store.shared.get(dbKey: key)
+        return db
     }
     
     static public func open(readonly: Bool = false, execute code: (Database) throws -> Void) throws {

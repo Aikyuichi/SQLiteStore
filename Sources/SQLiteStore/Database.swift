@@ -253,14 +253,9 @@ public class Database {
     }
     
     private func open(readonly: Bool = false) throws {
-        if readonly {
-            if sqlite3_open_v2(self.path, &self.sqlite, SQLITE_OPEN_READONLY, nil) != SQLITE_OK {
-                throw sqliteError()
-            }
-        } else {
-            if sqlite3_open(self.path, &self.sqlite) != SQLITE_OK {
-                throw sqliteError()
-            }
+        let readMode = readonly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE
+        if sqlite3_open_v2(self.path, &self.sqlite, readMode, nil) != SQLITE_OK {
+            throw sqliteError()
         }
         self.isOpen = true
     }
