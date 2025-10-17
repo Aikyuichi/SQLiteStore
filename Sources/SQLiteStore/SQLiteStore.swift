@@ -63,11 +63,11 @@ extension Database {
         let path = Store.shared.getPath(dbKey: key)
         let attachements = Store.shared.getAttachements(dbKey: key)
         let db = try Database.open(path, readonly: readonly)
+        defer { db.close() }
         for (schema, dbKey) in attachements {
             try db.attach(databaseAtPath: Store.shared.getPath(dbKey: dbKey), withSchema: schema)
         }
         try code(db)
-        db.close()
     }
     
     static public func closeAll() {
@@ -76,14 +76,14 @@ extension Database {
 }
 
 extension Database {
-    static public func update(path: String? = nil) throws {
+    static public func update(path: String? = nil) {
         if let path = path ?? Bundle.main.path(forResource: "updates", ofType: "json") {
             let updates = self.getUpdates(filename: path)
             if updates.isEmpty {
                 return
             }
             for update in updates {
-                if !(try self.executeUpdate(update)) {
+                if !self.executeUpdate(update) {
                     if update.skipOnError {
                         print("update failed but skipped: \(update)")
                     } else {
@@ -122,35 +122,34 @@ extension Database {
         return updates
     }
     
-    static private func executeUpdate(_ update: DbUpdate) throws -> Bool {
+    static private func executeUpdate(_ update: DbUpdate) -> Bool {
         var result = false
         if self.databaseExists(forKey: update.dbKey) {
-            try Database.open(forKey: update.dbKey) { db in
-                if db.userVersion < update.version {
-                    try db.transaction {
-                        for attach in update.attachments {
-                            try db.attach(databaseAtPath: Store.shared.getPath(dbKey: attach), withSchema: attach)
-                        }
-                        for command in update.commands {
-                            let stmt = try! db.prepareStatement(String(command))
-                            try stmt.step()
-                            stmt.finalize()
-                            result = !stmt.failed
-                            if !result {
-                                break
+            do {
+                let dbPath = Store.shared.getPath(dbKey: update.dbKey)
+                try Database.open(dbPath) { db in
+                    for attach in update.attachments {
+                        try db.attach(databaseAtPath: Store.shared.getPath(dbKey: attach), withSchema: attach)
+                    }
+                    if db.userVersion < update.version {
+                        db.transaction {
+                            for command in update.commands {
+                                let stmt = try db.prepareStatement(command)
+                                defer { stmt.finalize() }
+                                try stmt.step()
                             }
                         }
-                    }
-                    if result || update.skipOnError {
-                        try db.executeQuery("PRAGMA user_version = \(update.version)")
-                        if update.vacuum {
-                            try db.executeQuery("VACUUM")
+                        if result || update.skipOnError {
+                            try db.executeQuery("PRAGMA user_version = \(update.version)")
+                            if update.vacuum {
+                                try db.executeQuery("VACUUM")
+                            }
                         }
+                    } else {
+                        result = true
                     }
-                } else {
-                    result = true
                 }
-            }
+            } catch { }
         }
         return result
     }

@@ -18,9 +18,7 @@ public class Statement {
     private var sqlite: OpaquePointer? = nil
     private var sqliteStatement: OpaquePointer? = nil
     private var resultColumns: [String: Int] = [:]
-    internal var transactionDelegate: Transaction?
     public var uncompiledSql = ""
-    public var failed = false
     
     public var query: String {
         String(cString: sqlite3_sql(self.sqliteStatement))
@@ -66,8 +64,6 @@ public class Statement {
                 }
             }
         } else if stepResult != SQLITE_DONE {
-            self.failed = true
-            rollback()
             throw sqliteError(code: Int(stepResult))
         }
         return result
@@ -333,7 +329,6 @@ public class Statement {
     }
     
     private func bindFailed() throws {
-        rollback()
         throw sqliteError()
     }
     
@@ -346,9 +341,5 @@ public class Statement {
         print(error)
         #endif
         return error
-    }
-    
-    private func rollback() {
-        self.transactionDelegate?.rollback()
     }
 }
