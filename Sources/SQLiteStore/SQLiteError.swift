@@ -4,6 +4,7 @@
 //
 //  Created by Aikyuichi on 10/9/19.
 //  Copyright (c) 2022 aikyuichi <aikyu.sama@gmail.com>
+//  Use of this source code is governed by a MIT license that can be found in the LICENSE file.
 //
 
 import Foundation

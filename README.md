@@ -20,7 +20,7 @@ do {
             "@name": "John",
             "@lastname": "Smith"
         ])
-        let user = try db.selectFirst("SELECT name, lastname FROM user WHERE id = ?", parameters: [1])
+        let user = db.selectFirst("SELECT name, lastname FROM user WHERE id = ?", parameters: [1])
     }
 } catch {
     print(error)

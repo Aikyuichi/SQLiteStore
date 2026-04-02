@@ -4,6 +4,7 @@
 //
 //  Created by Aikyuichi on 10/9/19.
 //  Copyright (c) 2022 aikyuichi <aikyu.sama@gmail.com>
+//  Use of this source code is governed by a MIT license that can be found in the LICENSE file.
 //
 
 import Foundation
@@ -21,22 +22,26 @@ public class Statement {
     public var uncompiledSql = ""
     
     public var query: String {
-        String(cString: sqlite3_sql(self.sqliteStatement))
+        guard let sqliteStatement else { return "" }
+        return String(cString: sqlite3_sql(sqliteStatement))
     }
     
     @available(iOS 10.0, *)
     public var expandedQuery: String {
-        String(cString: sqlite3_expanded_sql(self.sqliteStatement))
+        guard let sqliteStatement else { return "" }
+        return String(cString: sqlite3_expanded_sql(sqliteStatement))
     }
     
     @available(macOS 12.0, *)
     @available(iOS 15.0, *)
     public var normalizedQuery: String {
-        String(cString: sqlite3_normalized_sql(self.sqliteStatement))
+        guard let sqliteStatement else { return "" }
+        return String(cString: sqlite3_normalized_sql(sqliteStatement))
     }
     
     public var columnCount: Int {
-        return Int(sqlite3_column_count(self.sqliteStatement))
+        guard let sqliteStatement else { return 0 }
+        return Int(sqlite3_column_count(sqliteStatement))
     }
     
     init?(sqlite: OpaquePointer?, query: String) {
@@ -55,7 +60,7 @@ public class Statement {
     @discardableResult
     public func step() throws -> Bool {
         var result = false
-        let stepResult = sqlite3_step(self.sqliteStatement)
+        let stepResult = sqlite3_step(sqliteStatement)
         if stepResult == SQLITE_ROW {
             result = true
             if self.resultColumns.isEmpty {
@@ -333,9 +338,13 @@ public class Statement {
     }
     
     private func sqliteError(code: Int? = nil) -> SQLiteError {
+        var additionalInfo = self.query
+        if self.sqliteStatement == nil {
+            additionalInfo = "statement is already finalized"
+        }
         let error = SQLiteError(
             code: code ?? Int(sqlite3_errcode(self.sqlite)),
-            message: "\(String(cString: sqlite3_errmsg(self.sqlite)))\n\(self.query)"
+            message: "\(String(cString: sqlite3_errmsg(self.sqlite)))\n\(additionalInfo)"
         )
         #if DEBUG
         print(error)

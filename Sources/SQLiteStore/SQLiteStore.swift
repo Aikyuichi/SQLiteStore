@@ -4,6 +4,7 @@
 //
 //  Created by Aikyuichi on 10/9/19.
 //  Copyright (c) 2022 aikyuichi <aikyu.sama@gmail.com>
+//  Use of this source code is governed by a MIT license that can be found in the LICENSE file.
 //
 
 import Foundation
@@ -123,35 +124,36 @@ extension Database {
     }
     
     static private func executeUpdate(_ update: DbUpdate) -> Bool {
-        var result = false
         if self.databaseExists(forKey: update.dbKey) {
+            let dbPath = Store.shared.getPath(dbKey: update.dbKey)
+            guard let db = try? Database.open(dbPath) else { return false }
+            defer { db.close() }
             do {
-                let dbPath = Store.shared.getPath(dbKey: update.dbKey)
-                try Database.open(dbPath) { db in
-                    for attach in update.attachments {
-                        try db.attach(databaseAtPath: Store.shared.getPath(dbKey: attach), withSchema: attach)
+                for attach in update.attachments {
+                    try db.attach(databaseAtPath: Store.shared.getPath(dbKey: attach), withSchema: attach)
+                }
+                if db.userVersion < update.version {
+                    try db.transaction {
+                        for command in update.commands {
+                            try db.executeQuery(command)
+                        }
+                        try db.executeQuery("PRAGMA user_version = \(update.version)")
                     }
-                    if db.userVersion < update.version {
-                        db.transaction {
-                            for command in update.commands {
-                                let stmt = try db.prepareStatement(command)
-                                defer { stmt.finalize() }
-                                try stmt.step()
-                            }
-                        }
-                        if result || update.skipOnError {
-                            try db.executeQuery("PRAGMA user_version = \(update.version)")
-                            if update.vacuum {
-                                try db.executeQuery("VACUUM")
-                            }
-                        }
-                    } else {
-                        result = true
+                    if update.vacuum {
+                        try db.executeQuery("VACUUM")
                     }
                 }
-            } catch { }
+            } catch {
+                if update.skipOnError {
+                    try? db.executeQuery("PRAGMA user_version = \(update.version)")
+                    if update.vacuum {
+                        try? db.executeQuery("VACUUM")
+                    }
+                }
+                return false
+            }
         }
-        return result
+        return true
     }
     
     static private func databaseExists(forKey key: String) -> Bool {

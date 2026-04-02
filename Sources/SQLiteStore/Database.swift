@@ -4,6 +4,7 @@
 //
 //  Created by Aikyuichi on 10/9/19.
 //  Copyright (c) 2022 aikyuichi <aikyu.sama@gmail.com>
+//  Use of this source code is governed by a MIT license that can be found in the LICENSE file.
 //
 
 import Foundation
@@ -30,6 +31,7 @@ public class Database {
     static internal func open(_ path: String, readonly: Bool = false) throws -> Database {
         let db = Database(path)
         try db.open(readonly: readonly)
+        try? db.executeQuery("PRAGMA foreign_keys = ON")
         return db
     }
     
@@ -49,16 +51,29 @@ public class Database {
         try executeQuery("DETACH DATABASE \(schema)")
     }
     
-    public func transaction(execute code: () throws -> Void) {
+    public func beginTransaction() throws {
+        try executeQuery("BEGIN TRANSACTION")
+    }
+    
+    public func commit() {
+        try? executeQuery("COMMIT")
+    }
+    
+    public func rollBack() {
+        try? executeQuery("ROLLBACK")
+    }
+    
+    public func transaction(execute code: () throws -> Void) throws {
         do {
-            try executeQuery("BEGIN TRANSACTION")
+            try beginTransaction()
             try code()
-            try? executeQuery("COMMIT")
+            commit()
         } catch {
-            try? executeQuery("ROLLBACK")
+            rollBack()
             #if DEBUG
             print("Rollback transaction")
             #endif
+            throw error
         }
     }
     
@@ -115,7 +130,7 @@ public class Database {
     }
     
     public func select(_ query: String, parameters: [Any?] = []) throws -> [[String: Any?]] {
-        var result: [[String: Any]] = []
+        var result: [[String: Any?]] = []
         try prepareStatement(query) { stmt in
             try stmt.bind(parameters: parameters)
             while let row = stmt.fetch() {
@@ -126,7 +141,7 @@ public class Database {
     }
     
     public func select(_ query: String, parameters: [String: Any?]) throws -> [[String: Any?]] {
-        var result: [[String: Any]] = []
+        var result: [[String: Any?]] = []
         try prepareStatement(query) { stmt in
             try stmt.bind(parameters: parameters)
             while let row = stmt.fetch() {
@@ -259,6 +274,7 @@ public class Database {
     private func open(readonly: Bool = false) throws {
         let readMode = readonly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE
         if sqlite3_open_v2(self.path, &self.sqlite, readMode, nil) != SQLITE_OK {
+            close()
             throw sqliteError()
         }
     }
