@@ -55,16 +55,19 @@ class Store {
     
     func remove(dbKey: String) {
         self.assets.removeValue(forKey: dbKey)
-        if let db = self.databases[dbKey] {
-            db.close()
-        }
+        self.databases[dbKey]?.close()
         self.databases.removeValue(forKey: dbKey)
     }
     
-    func close() {
-        for dbKey in self.databases.keys {
+    func close(dbKey: String? = nil) {
+        if let dbKey {
             self.databases[dbKey]?.close()
             self.databases.removeValue(forKey: dbKey)
+        } else {
+            for dbKey in self.databases.keys {
+                self.databases[dbKey]?.close()
+                self.databases.removeValue(forKey: dbKey)
+            }
         }
     }
 }

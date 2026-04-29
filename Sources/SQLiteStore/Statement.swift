@@ -28,8 +28,14 @@ public class Statement {
     
     @available(iOS 10.0, *)
     public var expandedQuery: String {
-        guard let sqliteStatement else { return "" }
-        return String(cString: sqlite3_expanded_sql(sqliteStatement))
+        var expandedSql: String = ""
+        guard let sqliteStatement else { return expandedSql }
+        var cExpandedSql = sqlite3_expanded_sql(sqliteStatement)
+        if let cExpandedSql {
+            expandedSql = String(cString: cExpandedSql)
+        }
+        sqlite3_free(cExpandedSql)
+        return expandedSql
     }
     
     @available(macOS 12.0, *)
@@ -91,17 +97,17 @@ public class Statement {
     public func bind(parameters: [Any?]) throws {
         for i in 0..<parameters.count {
             let parameter = parameters[i]
-            try bindValue(parameter, forIndex: i + 1)
+            try bind(value: parameter, forIndex: i + 1)
         }
     }
     
     public func bind(parameters: [String: Any?]) throws {
         for parameter in parameters {
-            try bindValue(parameter.value, forName: parameter.key)
+            try bind(value: parameter.value, forName: parameter.key)
         }
     }
     
-    public func bindInt(_ value: Int?, forIndex index: Int) throws {
+    public func bind(int value: Int?, forIndex index: Int) throws {
         if let value = value {
             if sqlite3_bind_int64(self.sqliteStatement, Int32(index), Int64(value)) != SQLITE_OK {
                 try bindFailed()
@@ -111,7 +117,7 @@ public class Statement {
         }
     }
     
-    public func bindString(_ value: String?, forIndex index: Int) throws {
+    public func bind(string value: String?, forIndex index: Int) throws {
         if let stringValue = value {
             if sqlite3_bind_text(self.sqliteStatement, Int32(index), (stringValue as NSString).utf8String, -1, nil) != SQLITE_OK {
                 try bindFailed()
@@ -121,7 +127,7 @@ public class Statement {
         }
     }
     
-    public func bindDouble(_ value: Double?, forIndex index: Int) throws {
+    public func bind(double value: Double?, forIndex index: Int) throws {
         if let value = value {
             if sqlite3_bind_double(self.sqliteStatement, Int32(index), value) != SQLITE_OK {
                 try bindFailed()
@@ -131,7 +137,7 @@ public class Statement {
         }
     }
     
-    public func bindBool(_ value: Bool?, forIndex index: Int) throws {
+    public func bind(bool value: Bool?, forIndex index: Int) throws {
         if let value = value {
             if sqlite3_bind_int(self.sqliteStatement, Int32(index), value ? 1 : 0) != SQLITE_OK {
                 try bindFailed()
@@ -141,7 +147,7 @@ public class Statement {
         }
     }
     
-    public func bindData(_ value: Data?, forIndex index: Int) throws {
+    public func bind(data value: Data?, forIndex index: Int) throws {
         if let value = value {
             let data = value as NSData
             if sqlite3_bind_blob(self.sqliteStatement, Int32(index), data.bytes, Int32(data.length), SQLITE_TRANSIENT) != SQLITE_OK {
@@ -152,51 +158,51 @@ public class Statement {
         }
     }
     
-    public func bindValue(_ value: Any?, forIndex index: Int) throws {
+    public func bind(value: Any?, forIndex index: Int) throws {
         switch value {
         case let stringValue as String?:
-            try bindString(stringValue, forIndex: index)
+            try bind(string: stringValue, forIndex: index)
         case let integerValue as Int?:
-            try bindInt(integerValue, forIndex: index)
+            try bind(int: integerValue, forIndex: index)
         case let doubleValue as Double?:
-            try bindDouble(doubleValue, forIndex: index)
+            try bind(double: doubleValue, forIndex: index)
         case let boolValue as Bool?:
-            try bindBool(boolValue, forIndex: index)
+            try bind(bool: boolValue, forIndex: index)
         case let dataValue as Data?:
-            try bindData(dataValue, forIndex: index)
+            try bind(data: dataValue, forIndex: index)
         default:
             bindNULL(forIndex: index)
         }
     }
     
-    public func bindInt(_ value: Int?, forName name: String) throws {
+    public func bind(int value: Int?, forName name: String) throws {
         let index = getBindIndex(forName: name)
-        try bindInt(value, forIndex: index)
+        try bind(int: value, forIndex: index)
     }
     
-    public func bindString(_ value: String?, forName name: String) throws {
+    public func bind(string value: String?, forName name: String) throws {
         let index = getBindIndex(forName: name)
-        try bindString(value, forIndex: index)
+        try bind(string: value, forIndex: index)
     }
     
-    public func bindDouble(_ value: Double?, forName name: String) throws {
+    public func bind(double value: Double?, forName name: String) throws {
         let index = getBindIndex(forName: name)
-        try bindDouble(value, forIndex: index)
+        try bind(double: value, forIndex: index)
     }
     
-    public func bindBool(_ value: Bool?, forName name: String) throws {
+    public func bind(bool value: Bool?, forName name: String) throws {
         let index = getBindIndex(forName: name)
-        try bindBool(value, forIndex: index)
+        try bind(bool: value, forIndex: index)
     }
     
-    public func bindData(_ value: Data?, forName name: String) throws {
+    public func bind(data value: Data?, forName name: String) throws {
         let index = getBindIndex(forName: name)
-        try bindData(value, forIndex: index)
+        try bind(data: value, forIndex: index)
     }
     
-    public func bindValue(_ value: Any?, forName name: String) throws {
+    public func bind(value: Any?, forName name: String) throws {
         let index = getBindIndex(forName: name)
-        try bindValue(value, forIndex: index)
+        try bind(value: value, forIndex: index)
     }
     
     public func fetch() -> [String: Any?]? {

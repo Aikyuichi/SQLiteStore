@@ -44,9 +44,9 @@ do {
         )
         """
         try db.prepareStatement(query) { stmt in
-            try stmt.bindInt(1, forName: "@id")
-            try stmt.bindString("John", forName: "@name")
-            try stmt.bindString("Smith", forName: "@lastname")
+            try stmt.bind(int: 1, forName: "@id")
+            try stmt.bind(string: "John", forName: "@name")
+            try stmt.bind(string: "Smith", forName: "@lastname")
             try stmt.step()
         }
 
