@@ -14,19 +14,17 @@ public class Database {
     private let path: String
     private var sqlite: OpaquePointer? = nil
     
-    public var lastInsertRowId: Int {
-        Int(sqlite3_last_insert_rowid(self.sqlite))
+    public var lastInsertRowId: Int { Int(sqlite3_last_insert_rowid(self.sqlite)) }
+    
+    public var affectedRows: Int {
+        if #available(iOS 15.4, *) {
+            return Int(sqlite3_changes64(self.sqlite))
+        } else {
+            return Int(sqlite3_changes(self.sqlite))
+        }
     }
     
-    public var userVersion: Int {
-        var version = 0
-        try? prepareStatement("PRAGMA user_version") { stmt in
-            if try stmt.step() {
-                version = stmt.getInt(forIndex: 0)!
-            }
-        }
-        return version
-    }
+    static public var sqliteVersion: String { String(cString: sqlite3_libversion()) }
     
     static internal func open(_ path: String, readonly: Bool = false) throws -> Database {
         let db = Database(path)
@@ -71,7 +69,7 @@ public class Database {
         } catch {
             rollBack()
             #if DEBUG
-            print("Rollback transaction")
+            print("Transaction rolled back")
             #endif
             throw error
         }
@@ -280,7 +278,8 @@ public class Database {
     }
     
     private func checkSchemaAlreadyExists(schema: String) -> Bool {
-        return selectBool("SELECT 1 FROM pragma_database_list WHERE name = ?", parameters: [schema]) ?? false
+        let attachements = getAttachements()
+        return attachements.contains(where: { $0["name"] as! String == schema })
     }
     
     private func sqliteError(message: String? = nil, query: String? = nil) -> SQLiteError {
@@ -296,5 +295,71 @@ public class Database {
         print(error)
         #endif
         return error
+    }
+}
+
+// MARK: - PRAGMAS
+
+extension Database {
+    
+    public func checkForeignKeys(ofSchema schema: String = "main") -> [[String: Any?]] {
+        return (try? select("PRAGMA \(schema).foreign_key_check")) ?? []
+    }
+    
+    public func checkForeignKeys(ofTable table: String, inSchema schema: String = "main") -> [[String: Any?]] {
+        return (try? select("PRAGMA \(schema).foreign_key_check(\(table))")) ?? []
+    }
+    
+    public func checkIntegrity(ofSchema schema: String = "main", limit: Int = 100, quick: Bool = false) -> [[String: Any?]] {
+        if quick {
+            return (try? select("PRAGMA \(schema).quick_check(\(limit)")) ?? []
+        } else {
+            return (try? select("PRAGMA \(schema).integrity_check(\(limit)")) ?? []
+        }
+    }
+    
+    public func checkIntegrity(ofTable table: String, inSchema schema: String = "main", quick: Bool = false) -> [[String: Any?]] {
+        if quick {
+            return (try? select("PRAGMA \(schema).quick_check(\(table)")) ?? []
+        } else {
+            return (try? select("PRAGMA \(schema).integrity_check(\(table)")) ?? []
+        }
+    }
+    
+    @discardableResult
+    public func optimize(schema: String = "main", withMask mask: Int? = nil) -> [[String: Any?]] {
+        return (try? select("PRAGMA \(schema).optimize\(mask != nil ? "(\(mask!))" : "")")) ?? []
+    }
+    
+    public func getAttachements() -> [[String: Any?]] {
+        return (try? select("PRAGMA database_list")) ?? []
+    }
+    
+    public func getForeignKeys(ofTable table: String) -> [[String: Any?]] {
+        return (try? select("PRAGMA foreign_key_list(\(table))")) ?? []
+    }
+    
+    public func getIndexes(ofTable table: String, inSchema schema: String = "main") -> [[String: Any?]] {
+        return (try? select("PRAGMA \(schema).index_list(\(table)")) ?? []
+    }
+    
+    public func getInfo(ofIndex index: String, inSchema schema: String = "main")-> [[String: Any?]] {
+        return (try? select("PRAGMA \(schema).index_info(\(index))")) ?? []
+    }
+    
+    public func getInfo(ofTable table: String, inSchema schema: String = "main")-> [[String: Any?]] {
+        return (try? select("PRAGMA \(schema).table_xinfo(\(table))")) ?? []
+    }
+    
+    public func getTables(ofSchema schema: String = "main") -> [[String: Any?]] {
+        return (try? select("PRAGMA \(schema).table_list")) ?? []
+    }
+    
+    public func getUserVersion(ofSchema schema: String = "main") -> Int {
+        return selectInt("PRAGMA \(schema).user_version") ?? 0
+    }
+    
+    public func setUserVersion(_ version: Int, ofSchema schema: String = "main") {
+        try? executeQuery("PRAGMA \(schema).user_version=\(version)")
     }
 }

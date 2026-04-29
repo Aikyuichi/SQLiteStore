@@ -71,7 +71,7 @@ extension Database {
         try code(db)
     }
     
-    static public func closeAll() {
+    static public func close(forKey key: String? = nil) {
         Store.shared.close()
     }
 }
@@ -132,7 +132,7 @@ extension Database {
                 for attach in update.attachments {
                     try db.attach(databaseAtPath: Store.shared.getPath(dbKey: attach), withSchema: attach)
                 }
-                if db.userVersion < update.version {
+                if db.getUserVersion() < update.version {
                     try db.transaction {
                         for command in update.commands {
                             try db.executeQuery(command)
@@ -141,6 +141,9 @@ extension Database {
                     }
                     if update.vacuum {
                         try db.executeQuery("VACUUM")
+                    }
+                    if update.optimize {
+                        try db.executeQuery("PRAGMA optimize")
                     }
                 }
             } catch {
@@ -171,6 +174,7 @@ private struct DbUpdate {
     let commands: [String]
     let attachments: [String]
     let vacuum: Bool
+    let optimize: Bool
     let skipOnError: Bool
     
     init?(version: Int, dbKey: String, json: [String: Any]) {
@@ -183,6 +187,7 @@ private struct DbUpdate {
         self.commands = commands
         self.attachments = json["attachments"] as? [String] ?? []
         self.vacuum = json["vacuum"] as? Bool ?? false
+        self.optimize = json["optimize"] as? Bool ?? false
         self.skipOnError = json["skipOnError"] as? Bool ?? false
         
     }
