@@ -2,16 +2,24 @@
 //  SqliteStore.swift
 //  SqliteStore
 //
-//  Created by Aikyuichi on 10/9/19.
+//  Created by Aikyuichi on 16/10/25.
 //  Copyright (c) 2022 aikyuichi <aikyu.sama@gmail.com>
 //  Use of this source code is governed by a MIT license that can be found in the LICENSE file.
 //
 
 import Foundation
 
-extension Database {
+extension Database {    
     static public func register(path: String, forKey key: String, attachements: [String: String] = [:], readonly: Bool = false, default defaultDb: Bool = false) {
-        Store.shared.add(dbKey: key, dbPath: path, attachements: attachements, readonlyDb: readonly, defaultDb: defaultDb)
+        DbStore.shared.add(
+            asset: DbAsset(
+                path: path,
+                attachements: attachements,
+                readonly: readonly
+            ),
+            forKey: key,
+            default: defaultDb
+        )
     }
     
     #if os(iOS)
@@ -42,49 +50,53 @@ extension Database {
     #endif
     
     static public func unregister(forkey key: String) {
-        Store.shared.remove(dbKey: key)
+        DbStore.shared.remove(dbKey: key)
     }
     
-    static public func get() -> Database? {
-        let key = Store.shared.getDefaultDbKey()
-        return get(forKey: key)
+    static public func get() throws -> Database {
+        let key = DbStore.shared.getDefaultDbKey()
+        return try get(forKey: key)
     }
     
-    static public func get(forKey key: String) -> Database? {
-        let db = Store.shared.get(dbKey: key)
-        return db
+    static public func get(forKey key: String) throws -> Database {
+        return try DbStore.shared.getDatabase(forKey: key)
     }
     
-    static public func open(readonly: Bool = false, execute code: (Database) throws -> Void) throws {
-        let key = Store.shared.getDefaultDbKey()
+    static public func open(readonly: Bool = false, execute code: (_ db: Database) throws -> Void) throws {
+        let key = DbStore.shared.getDefaultDbKey()
         try Database.open(forKey: key, readonly: readonly, execute: code)
     }
     
-    static public func open(forKey key: String, readonly: Bool = false, execute code: (Database) throws -> Void) throws {
-        let path = Store.shared.getPath(dbKey: key)
-        let attachements = Store.shared.getAttachements(dbKey: key)
-        let db = try Database.open(path, readonly: readonly)
+    static public func open(forKey key: String, readonly: Bool = false, execute code: (_ db: Database) throws -> Void) throws {
+        let dbAsset = try DbStore.shared.getAsset(forKey: key)
+        let db = try Database.open(dbAsset.path, readonly: readonly)
         defer { db.close() }
-        for (schema, dbKey) in attachements {
-            try db.attach(databaseAtPath: Store.shared.getPath(dbKey: dbKey), withSchema: schema)
+        for (schema, dbKey) in dbAsset.attachements {
+            let attachementAsset = try DbStore.shared.getAsset(forKey: dbKey)
+            try db.attach(databaseAtPath: attachementAsset.path, withSchema: schema)
         }
         try code(db)
     }
     
     static public func close(forKey key: String? = nil) {
-        Store.shared.close()
+        DbStore.shared.close(dbKey: key)
+    }
+    
+    static public func onError(callback: @escaping (SQLiteError) -> Void) {
+        Self.onErrorCallback = callback
     }
 }
 
 extension Database {
-    static public func update(path: String? = nil) {
+    static public func update(path: String? = nil, before: ((_ update: Dictionary<String, Any?>) -> Void)? = nil, after: ((_ update: Dictionary<String, Any?>, _ error: Bool) -> Void)? = nil) {
         if let path = path ?? Bundle.main.path(forResource: "updates", ofType: "json") {
             let updates = self.getUpdates(filename: path)
             if updates.isEmpty {
                 return
             }
             for update in updates {
-                if !self.executeUpdate(update) {
+                let result = self.executeUpdate(update, before: before, after: after)
+                if !result {
                     if update.skipOnError {
                         print("update failed but skipped: \(update)")
                     } else {
@@ -123,48 +135,46 @@ extension Database {
         return updates
     }
     
-    static private func executeUpdate(_ update: DbUpdate) -> Bool {
-        if self.databaseExists(forKey: update.dbKey) {
-            let dbPath = Store.shared.getPath(dbKey: update.dbKey)
-            guard let db = try? Database.open(dbPath) else { return false }
+    static private func executeUpdate(_ update: DbUpdate, before: ((_ update: Dictionary<String, Any?>) -> Void)?, after: ((_ update: Dictionary<String, Any?>, _ error: Bool) -> Void)?) -> Bool {
+        if let dbAssets = try? DbStore.shared.getAsset(forKey: update.dbKey), dbAssets.fileExists {
+            guard let db = try? Database.open(dbAssets.path) else {
+                after?(update.toDict(), false)
+                return false
+            }
             defer { db.close() }
             do {
                 for attach in update.attachments {
-                    try db.attach(databaseAtPath: Store.shared.getPath(dbKey: attach), withSchema: attach)
+                    let attachmentAsset = try DbStore.shared.getAsset(forKey: attach)
+                    try db.attach(databaseAtPath: attachmentAsset.path, withSchema: attach)
                 }
                 if db.getUserVersion() < update.version {
+                    before?(update.toDict())
                     try db.transaction {
                         for command in update.commands {
                             try db.executeQuery(command)
                         }
-                        try db.executeQuery("PRAGMA user_version = \(update.version)")
+                        try db.setUserVersion(update.version)
                     }
                     if update.vacuum {
                         try db.executeQuery("VACUUM")
                     }
                     if update.optimize {
-                        try db.executeQuery("PRAGMA optimize")
+                        try db.optimize()
                     }
+                    after?(update.toDict(), true)
                 }
             } catch {
                 if update.skipOnError {
-                    try? db.executeQuery("PRAGMA user_version = \(update.version)")
+                    try? db.setUserVersion(update.version)
                     if update.vacuum {
                         try? db.executeQuery("VACUUM")
                     }
                 }
+                after?(update.toDict(), false)
                 return false
             }
         }
         return true
-    }
-    
-    static private func databaseExists(forKey key: String) -> Bool {
-        let dbPath = Store.shared.getPath(dbKey: key)
-        if !dbPath.isEmpty {
-            return FileManager.default.fileExists(atPath: dbPath)
-        }
-        return false
     }
 }
 
@@ -190,5 +200,17 @@ private struct DbUpdate {
         self.optimize = json["optimize"] as? Bool ?? false
         self.skipOnError = json["skipOnError"] as? Bool ?? false
         
+    }
+    
+    func toDict() -> [String: Any] {
+        return [
+            "version": version,
+            "dbKey": dbKey,
+            "commands": commands,
+            "attachments": attachments,
+            "vacuum": vacuum,
+            "optimize": optimize,
+            "skipOnError": skipOnError
+        ]
     }
 }

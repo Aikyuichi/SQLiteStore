@@ -2,7 +2,7 @@
 //  SqliteError.swift
 //  SqliteStore
 //
-//  Created by Aikyuichi on 10/9/19.
+//  Created by Aikyuichi on 16/10/25.
 //  Copyright (c) 2022 aikyuichi <aikyu.sama@gmail.com>
 //  Use of this source code is governed by a MIT license that can be found in the LICENSE file.
 //
@@ -10,19 +10,25 @@
 import Foundation
 import SQLite3
 
-public struct SQLiteError: Error, CustomStringConvertible {
+public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
     public let code: SQLiteCode
     public let message: String
+    public let query: String?
     public let description: String
     
-    init(code: Int, message: String) {
-        if let errorCode = SQLiteCode(rawValue: code) {
-            self.code = errorCode
-        } else {
-            self.code = SQLiteCode.SQLITE_ERROR
-        }
+    public var errorDescription: String? {
+        return description
+    }
+    
+    init(code: Int, message: String, query: String? = nil) {
+        self.code = SQLiteCode(rawValue: code) ?? SQLiteCode.SQLITE_ERROR
         self.message = message
-        self.description = "[\(self.code) (\(code))] \(message)"
+        self.query = query
+        if let query {
+            self.description = "[\(self.code) (\(code))] \(message)\n\(query)"
+        } else {
+            self.description = "[\(self.code) (\(code))] \(message)"
+        }
     }
 }
 

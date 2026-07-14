@@ -2,7 +2,7 @@
 //  Database.swift
 //  SqliteStore
 //
-//  Created by Aikyuichi on 10/9/19.
+//  Created by Aikyuichi on 16/10/25.
 //  Copyright (c) 2022 aikyuichi <aikyu.sama@gmail.com>
 //  Use of this source code is governed by a MIT license that can be found in the LICENSE file.
 //
@@ -24,6 +24,8 @@ public class Database {
         }
     }
     
+    static internal var onErrorCallback: ((SQLiteError) -> Void)?
+    
     static public var sqliteVersion: String { String(cString: sqlite3_libversion()) }
     
     static internal func open(_ path: String, readonly: Bool = false) throws -> Database {
@@ -33,7 +35,7 @@ public class Database {
         return db
     }
     
-    static public func open(_ path: String, readonly: Bool = false, execute code: (Database) throws -> Void) throws {
+    static public func open(_ path: String, readonly: Bool = false, execute code: (_ db: Database) throws -> Void) throws {
         let db = try Database.open(path, readonly: readonly)
         defer { db.close() }
         try code(db)
@@ -76,7 +78,7 @@ public class Database {
     }
     
     public func prepareStatement(_ query: String) throws -> Statement {
-        guard let statement = Statement(sqlite: self.sqlite, query: query) else {
+        guard let statement = Statement(sqlite: self.sqlite, query: query, onError: Self.onErrorCallback) else {
             throw sqliteError(query: query)
         }
         return statement
@@ -149,124 +151,113 @@ public class Database {
         return result
     }
     
-    public func selectFirst(_ query: String, parameters: [Any?] = []) -> [String: Any?]? {
+    public func selectFirst(_ query: String, parameters: [Any?] = []) throws -> [String: Any?]? {
+        return try select(query, parameters: parameters).first
+    }
+    
+    public func selectFirst(_ query: String, parameters: [String: Any?]) throws -> [String: Any?]? {
         return try? select(query, parameters: parameters).first
     }
     
-    public func selectFirst(_ query: String, parameters: [String: Any?]) -> [String: Any?]? {
-        return try? select(query, parameters: parameters).first
-    }
-    
-    public func selectBool(_ query: String, parameters: [Any?] = []) -> Bool? {
+    public func selectBool(_ query: String, parameters: [Any?] = []) throws -> Bool? {
         var scalar: Bool? = nil
-        do {
-            try prepareStatement(query) { stmt in
-                try stmt.bind(parameters: parameters)
-                if try stmt.step() {
-                    scalar = stmt.getBool(forIndex: 0)
-                }
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getBool(forIndex: 0)
             }
-        } catch { }
+        }
         return scalar
     }
     
-    public func selectBool(_ query: String, parameters: [String: Any?]) -> Bool? {
+    public func selectBool(_ query: String, parameters: [String: Any?]) throws -> Bool? {
         var scalar: Bool? = nil
-        do {
-            try prepareStatement(query) { stmt in
-                try stmt.bind(parameters: parameters)
-                if try stmt.step() {
-                    scalar = stmt.getBool(forIndex: 0)
-                }
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getBool(forIndex: 0)
             }
-        } catch { }
+        }
         return scalar
     }
     
-    public func selectDouble(_ query: String, parameters: [Any?] = []) -> Double? {
+    public func selectDouble(_ query: String, parameters: [Any?] = []) throws -> Double? {
         var scalar: Double? = nil
-        do {
-            try prepareStatement(query) { stmt in
-                try stmt.bind(parameters: parameters)
-                if try stmt.step() {
-                    scalar = stmt.getDouble(forIndex: 0)
-                }
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getDouble(forIndex: 0)
             }
-        } catch { }
+        }
         return scalar
     }
     
-    public func selectDouble(_ query: String, parameters: [String: Any?]) -> Double? {
+    public func selectDouble(_ query: String, parameters: [String: Any?]) throws -> Double? {
         var scalar: Double? = nil
-        do {
-            try prepareStatement(query) { stmt in
-                try stmt.bind(parameters: parameters)
-                if try stmt.step() {
-                    scalar = stmt.getDouble(forIndex: 0)
-                }
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getDouble(forIndex: 0)
             }
-        } catch { }
+        }
         return scalar
     }
     
-    public func selectInt(_ query: String, parameters: [Any?] = []) -> Int? {
+    public func selectInt(_ query: String, parameters: [Any?] = []) throws -> Int? {
         var scalar: Int? = nil
-        do {
-            try prepareStatement(query) { stmt in
-                try stmt.bind(parameters: parameters)
-                if try stmt.step() {
-                    scalar = stmt.getInt(forIndex: 0)
-                }
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getInt(forIndex: 0)
             }
-        } catch { }
+        }
         return scalar
     }
     
-    public func selectInt(_ query: String, parameters: [String: Any?]) -> Int? {
+    public func selectInt(_ query: String, parameters: [String: Any?]) throws -> Int? {
         var scalar: Int? = nil
-        do {
-            try prepareStatement(query) { stmt in
-                try stmt.bind(parameters: parameters)
-                if try stmt.step() {
-                    scalar = stmt.getInt(forIndex: 0)
-                }
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getInt(forIndex: 0)
             }
-        } catch { }
+        }
         return scalar
     }
     
-    public func selectString(_ query: String, parameters: [Any?] = []) -> String? {
+    public func selectString(_ query: String, parameters: [Any?] = []) throws -> String? {
         var scalar: String? = nil
-        do {
-            try prepareStatement(query) { stmt in
-                try stmt.bind(parameters: parameters)
-                if try stmt.step() {
-                    scalar = stmt.getString(forIndex: 0)
-                }
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getString(forIndex: 0)
             }
-        } catch { }
+        }
         return scalar
     }
     
-    public func selectString(_ query: String, parameters: [String: Any?]) -> String? {
+    public func selectString(_ query: String, parameters: [String: Any?]) throws -> String? {
         var scalar: String? = nil
-        do {
-            try prepareStatement(query) { stmt in
-                try stmt.bind(parameters: parameters)
-                if try stmt.step() {
-                    scalar = stmt.getString(forIndex: 0)
-                }
+        try prepareStatement(query) { stmt in
+            try stmt.bind(parameters: parameters)
+            if try stmt.step() {
+                scalar = stmt.getString(forIndex: 0)
             }
-        } catch { }
+        }
         return scalar
     }
     
     internal func close() {
         sqlite3_close(self.sqlite)
+        self.sqlite = nil
     }
     
     private init(_ path : String) {
         self.path = path
+    }
+    
+    deinit {
+        close()
     }
     
     private func open(readonly: Bool = false) throws {
@@ -284,16 +275,15 @@ public class Database {
     
     private func sqliteError(message: String? = nil, query: String? = nil) -> SQLiteError {
         var message = message ?? String(cString: sqlite3_errmsg(self.sqlite))
-        if let query {
-            message.append("\n\(query)")
-        }
         let error = SQLiteError(
             code: Int(sqlite3_errcode(self.sqlite)),
-            message: message
+            message: message,
+            query: query,
         )
         #if DEBUG
         print(error)
         #endif
+        Self.onErrorCallback?(error)
         return error
     }
 }
@@ -356,7 +346,7 @@ extension Database {
     }
     
     public func getUserVersion(ofSchema schema: String = "main") -> Int {
-        return selectInt("PRAGMA \(schema).user_version") ?? 0
+        return (try? selectInt("PRAGMA \(schema).user_version")) ?? 0
     }
     
     public func setUserVersion(_ version: Int, ofSchema schema: String = "main") {

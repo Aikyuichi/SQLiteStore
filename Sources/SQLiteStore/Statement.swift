@@ -2,7 +2,7 @@
 //  Statement.swift
 //  SqliteStore
 //
-//  Created by Aikyuichi on 10/9/19.
+//  Created by Aikyuichi on 16/10/25.
 //  Copyright (c) 2022 aikyuichi <aikyu.sama@gmail.com>
 //  Use of this source code is governed by a MIT license that can be found in the LICENSE file.
 //
@@ -16,7 +16,8 @@ protocol Transaction {
 
 public class Statement {
     private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-    private var sqlite: OpaquePointer? = nil
+    private let sqlite: OpaquePointer?
+    private let onError: ((SQLiteError) -> Void)?
     private var sqliteStatement: OpaquePointer? = nil
     private var resultColumns: [String: Int] = [:]
     public var uncompiledSql = ""
@@ -50,10 +51,11 @@ public class Statement {
         return Int(sqlite3_column_count(sqliteStatement))
     }
     
-    init?(sqlite: OpaquePointer?, query: String) {
+    init?(sqlite: OpaquePointer?, query: String, onError: ((SQLiteError) -> Void)? = nil) {
         var uncompiledSql: UnsafePointer<CChar>? = nil
         if sqlite3_prepare_v2(sqlite, query, -1, &self.sqliteStatement, &uncompiledSql) == SQLITE_OK {
             self.sqlite = sqlite
+            self.onError = onError
             if let uncompiledSql = uncompiledSql, strlen(uncompiledSql) > 0 {
                 self.uncompiledSql = String(cString: uncompiledSql)
                 print("warning: uncompiled sql - \(self.uncompiledSql)")
@@ -61,6 +63,10 @@ public class Statement {
         } else {
             return nil
         }
+    }
+    
+    deinit {
+        finalize()
     }
     
     @discardableResult
@@ -355,6 +361,7 @@ public class Statement {
         #if DEBUG
         print(error)
         #endif
+        self.onError?(error)
         return error
     }
 }
