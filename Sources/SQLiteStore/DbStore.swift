@@ -15,6 +15,7 @@ class DbStore {
     private var assets: [String: DbAsset] = [:]
     private var databases: [String: Database] = [:]
     private var defaultDbKey = ""
+    private var errorHandler: ((SQLiteError) -> Void)?
     
     private init() { }
     
@@ -38,10 +39,11 @@ class DbStore {
             if !dbAsset.fileExists {
                 throw DbStoreError(message: "file not found: \(dbAsset.path)")
             }
-            let db = try Database.open(dbAsset.path, readonly: dbAsset.readonly)
+            let db = try Database.open(dbAsset.path, readonly: dbAsset.readonly, onError: self.errorHandler)
             for (schema, dbKey) in dbAsset.attachements {
-                let attachementAsset = try self.getAsset(forKey: dbKey)
-                try db.attach(databaseAtPath: attachementAsset.path, withSchema: schema)
+                if let attachementAsset = try? self.getAsset(forKey: dbKey) {
+                    try db.attach(databaseAtPath: attachementAsset.path, withSchema: schema)
+                }
             }
             self.databases[dbKey] = db
         }
@@ -71,6 +73,10 @@ class DbStore {
                 self.databases.removeValue(forKey: dbKey)
             }
         }
+    }
+    
+    func setErrorHandler(_ handler: @escaping (SQLiteError) -> Void) {
+        self.errorHandler = handler
     }
 }
 

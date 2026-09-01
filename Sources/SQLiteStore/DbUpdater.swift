@@ -10,9 +10,9 @@ import Foundation
 struct DbUpdater {
     private let filePath: String
     private let beforeUpdate: ((_ update: [String: Any?]) -> Void)?
-    private let afterUpdate: ((_ update: [String: Any?], _ error: Bool) -> Void)?
+    private let afterUpdate: ((_ update: [String: Any?], _ error: Error?) -> Void)?
     
-    init(filePath: String, beforeUpdate: ((_: [String : Any?]) -> Void)?, afterUpdate: ((_: [String : Any?], _: Bool) -> Void)?) {
+    init(filePath: String, beforeUpdate: ((_: [String : Any?]) -> Void)?, afterUpdate: ((_: [String : Any?], _: Error?) -> Void)?) {
         self.filePath = filePath
         self.beforeUpdate = beforeUpdate
         self.afterUpdate = afterUpdate
@@ -67,40 +67,42 @@ struct DbUpdater {
     
     private func executeUpdate(_ update: UpdateItem) -> Bool {
         if let dbAssets = try? DbStore.shared.getAsset(forKey: update.dbKey), dbAssets.fileExists {
-            guard let db = try? Database.open(dbAssets.path) else {
-                self.afterUpdate?(update.toDict(), true)
-                return false
-            }
-            defer { db.close() }
             do {
+                let db = try Database.open(dbAssets.path)
+                defer { db.close() }
                 for attach in update.attachments {
                     let attachmentAsset = try DbStore.shared.getAsset(forKey: attach)
                     try db.attach(databaseAtPath: attachmentAsset.path, withSchema: attach)
                 }
-                if db.getUserVersion() < update.version {
-                    self.beforeUpdate?(update.toDict())
-                    try db.transaction {
-                        for command in update.commands {
-                            try db.executeQuery(command)
+                do {
+                    if db.getUserVersion() < update.version {
+                        self.beforeUpdate?(update.toDict())
+                        try db.transaction {
+                            for command in update.commands {
+                                try db.executeQuery(command)
+                            }
+                            db.setUserVersion(update.version)
                         }
+                        if update.vacuum {
+                            try db.executeQuery("VACUUM")
+                        }
+                        if update.optimize {
+                            db.optimize()
+                        }
+                        self.afterUpdate?(update.toDict(), nil)
+                    }
+                } catch {
+                    if update.skipOnError {
                         db.setUserVersion(update.version)
+                        if update.vacuum {
+                            try? db.executeQuery("VACUUM")
+                        }
                     }
-                    if update.vacuum {
-                        try db.executeQuery("VACUUM")
-                    }
-                    if update.optimize {
-                        db.optimize()
-                    }
-                    self.afterUpdate?(update.toDict(), false)
+                    self.afterUpdate?(update.toDict(), error)
+                    return false
                 }
             } catch {
-                if update.skipOnError {
-                    db.setUserVersion(update.version)
-                    if update.vacuum {
-                        try? db.executeQuery("VACUUM")
-                    }
-                }
-                self.afterUpdate?(update.toDict(), true)
+                self.afterUpdate?(update.toDict(), error)
                 return false
             }
         }

@@ -17,7 +17,7 @@ protocol Transaction {
 public class Statement {
     private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     private let sqlite: OpaquePointer?
-    private let onError: ((SQLiteError) -> Void)?
+    private let errorHandler: ((SQLiteError) -> Void)?
     private var sqliteStatement: OpaquePointer? = nil
     private var resultColumns: [String: Int] = [:]
     public var uncompiledSql = ""
@@ -55,7 +55,7 @@ public class Statement {
         var uncompiledSql: UnsafePointer<CChar>? = nil
         if sqlite3_prepare_v2(sqlite, query, -1, &self.sqliteStatement, &uncompiledSql) == SQLITE_OK {
             self.sqlite = sqlite
-            self.onError = onError
+            self.errorHandler = onError
             if let uncompiledSql = uncompiledSql, strlen(uncompiledSql) > 0 {
                 self.uncompiledSql = String(cString: uncompiledSql)
                 print("warning: uncompiled sql - \(self.uncompiledSql)")
@@ -350,18 +350,23 @@ public class Statement {
     }
     
     private func sqliteError(code: Int? = nil) -> SQLiteError {
-        var additionalInfo = self.query
+        var message = String(cString: sqlite3_errmsg(self.sqlite))
         if self.sqliteStatement == nil {
-            additionalInfo = "statement is already finalized"
+            message = "\nstatement is already finalized"
+        }
+        var query = self.expandedQuery
+        if query.isEmpty {
+            query = self.query
         }
         let error = SQLiteError(
             code: code ?? Int(sqlite3_errcode(self.sqlite)),
-            message: "\(String(cString: sqlite3_errmsg(self.sqlite)))\n\(additionalInfo)"
+            message: message,
+            query: query,
         )
         #if DEBUG
         print(error)
         #endif
-        self.onError?(error)
+        self.errorHandler?(error)
         return error
     }
 }

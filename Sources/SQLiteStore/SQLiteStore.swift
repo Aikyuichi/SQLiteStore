@@ -72,13 +72,14 @@ extension Database {
         let db = try Database.open(dbAsset.path, readonly: readonly)
         defer { db.close() }
         for (schema, dbKey) in dbAsset.attachements {
-            let attachementAsset = try DbStore.shared.getAsset(forKey: dbKey)
-            try db.attach(databaseAtPath: attachementAsset.path, withSchema: schema)
+            if let attachementAsset = try? DbStore.shared.getAsset(forKey: dbKey) {
+                try db.attach(databaseAtPath: attachementAsset.path, withSchema: schema)
+            }
         }
         try code(db)
     }
     
-    static public func update(path: String? = nil, before: ((_ update: [String: Any?]) -> Void)? = nil, after: ((_ update: [String: Any?], _ error: Bool) -> Void)? = nil) {
+    static public func update(path: String? = nil, before: ((_ update: [String: Any?]) -> Void)? = nil, after: ((_ update: [String: Any?], _ error: Error?) -> Void)? = nil) {
         if let path = path ?? Bundle.main.path(forResource: "updates", ofType: "json") {
             let updater = DbUpdater(filePath: path, beforeUpdate: before, afterUpdate: after)
             updater.run()
@@ -94,6 +95,6 @@ extension Database {
     }
     
     static public func onError(callback: @escaping (SQLiteError) -> Void) {
-        Self.onErrorCallback = callback
+        DbStore.shared.setErrorHandler(callback)
     }
 }

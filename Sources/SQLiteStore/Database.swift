@@ -12,6 +12,7 @@ import SQLite3
 
 public class Database {
     private let path: String
+    private let errorHandler: ((SQLiteError) -> Void)?
     private var sqlite: OpaquePointer? = nil
     
     public var lastInsertRowId: Int { Int(sqlite3_last_insert_rowid(self.sqlite)) }
@@ -24,12 +25,10 @@ public class Database {
         }
     }
     
-    static internal var onErrorCallback: ((SQLiteError) -> Void)?
-    
     static public var sqliteVersion: String { String(cString: sqlite3_libversion()) }
     
-    static internal func open(_ path: String, readonly: Bool = false) throws -> Database {
-        let db = Database(path)
+    static internal func open(_ path: String, readonly: Bool = false, onError: ((SQLiteError) -> Void)? = nil) throws -> Database {
+        let db = Database(path, onError: onError)
         try db.open(readonly: readonly)
         try? db.executeQuery("PRAGMA foreign_keys = ON")
         return db
@@ -78,7 +77,7 @@ public class Database {
     }
     
     public func prepareStatement(_ query: String) throws -> Statement {
-        guard let statement = Statement(sqlite: self.sqlite, query: query, onError: Self.onErrorCallback) else {
+        guard let statement = Statement(sqlite: self.sqlite, query: query, onError: self.errorHandler) else {
             throw sqliteError(query: query)
         }
         return statement
@@ -252,8 +251,9 @@ public class Database {
         self.sqlite = nil
     }
     
-    private init(_ path : String) {
+    private init(_ path : String, onError: ((SQLiteError) -> Void)? = nil) {
         self.path = path
+        self.errorHandler = onError
     }
     
     deinit {
@@ -283,7 +283,7 @@ public class Database {
         #if DEBUG
         print(error)
         #endif
-        Self.onErrorCallback?(error)
+        self.errorHandler?(error)
         return error
     }
 }
