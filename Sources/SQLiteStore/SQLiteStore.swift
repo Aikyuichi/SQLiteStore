@@ -9,7 +9,8 @@
 
 import Foundation
 
-extension Database {    
+extension Database {
+    
     static public func register(path: String, forKey key: String, attachements: [String: String] = [:], readonly: Bool = false, default defaultDb: Bool = false) {
         DbStore.shared.add(
             asset: DbAsset(
@@ -79,13 +80,24 @@ extension Database {
         try code(db)
     }
     
-    static public func update(path: String? = nil, before: ((_ update: [String: Any?]) -> Void)? = nil, after: ((_ update: [String: Any?], _ error: Error?) -> Void)? = nil) {
-        if let path = path ?? Bundle.main.path(forResource: "updates", ofType: "json") {
-            let updater = DbUpdater(filePath: path, beforeUpdate: before, afterUpdate: after)
+    static public func update(_ databaseFile: String? = nil, using source: String? = nil, before: ((_ update: [String: Any?]) -> Void)? = nil, after: ((_ update: [String: Any?], _ error: Error?) -> Void)? = nil) {
+        if let _source = source ?? Bundle.main.path(forResource: "updates", ofType: "json") {
+            let updater = DbUpdater(databaseFile: databaseFile, updatesSource: _source, beforeUpdate: before, afterUpdate: after)
             updater.run()
         } else {
             #if DEBUG
             print("updates.json not found in main bundle")
+            #endif
+        }
+    }
+    
+    static public func update(forKey key: String, using source: String? = nil, before: ((_ update: [String: Any?]) -> Void)? = nil, after: ((_ update: [String: Any?], _ error: Error?) -> Void)? = nil) {
+        do {
+            let dbAsset = try DbStore.shared.getAsset(forKey: key)
+            self.update(dbAsset.path, using: source, before: before, after: after)
+        } catch {
+            #if DEBUG
+            print(error)
             #endif
         }
     }

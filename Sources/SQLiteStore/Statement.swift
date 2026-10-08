@@ -31,7 +31,7 @@ public class Statement {
     public var expandedQuery: String {
         var expandedSql: String = ""
         guard let sqliteStatement else { return expandedSql }
-        var cExpandedSql = sqlite3_expanded_sql(sqliteStatement)
+        let cExpandedSql = sqlite3_expanded_sql(sqliteStatement)
         if let cExpandedSql {
             expandedSql = String(cString: cExpandedSql)
         }

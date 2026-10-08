@@ -8,12 +8,14 @@
 import Foundation
 
 struct DbUpdater {
-    private let filePath: String
+    private let databaseFile: String?
+    private let updatesSource: String
     private let beforeUpdate: ((_ update: [String: Any?]) -> Void)?
     private let afterUpdate: ((_ update: [String: Any?], _ error: Error?) -> Void)?
     
-    init(filePath: String, beforeUpdate: ((_: [String : Any?]) -> Void)?, afterUpdate: ((_: [String : Any?], _: Error?) -> Void)?) {
-        self.filePath = filePath
+    init(databaseFile: String? = nil, updatesSource: String, beforeUpdate: ((_: [String : Any?]) -> Void)?, afterUpdate: ((_: [String : Any?], _: Error?) -> Void)?) {
+        self.databaseFile = databaseFile
+        self.updatesSource = updatesSource
         self.beforeUpdate = beforeUpdate
         self.afterUpdate = afterUpdate
     }
@@ -43,14 +45,27 @@ struct DbUpdater {
     private func getUpdates() -> [UpdateItem] {
         var updates: [UpdateItem] = []
         do {
-            if let data = try String(contentsOfFile: self.filePath).data(using: .utf8),
+            if let data = try String(contentsOfFile: self.updatesSource).data(using: .utf8),
                let json = try JSONSerialization.jsonObject(with: data) as? [String: [String: Any]] {
-                let dbKeys = json.keys
-                for dbKey in dbKeys {
-                    if let versions = json[dbKey]!["versions"] as? [String: [String: Any]] {
+                if self.databaseFile == nil {
+                    let dbKeys = json.keys
+                    for dbKey in dbKeys {
+                        if let versions = json[dbKey]!["versions"] as? [String: [String: Any]] {
+                            let versionIds = versions.keys.sorted { Int($0)! < Int($1)! }
+                            for versionId in versionIds {
+                                if let update = UpdateItem(version: Int(versionId)!, dbKey: dbKey, json: versions[versionId]!) {
+                                    updates.append(update)
+                                } else {
+                                    break
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if let versions = json["versions"] as? [String: [String: Any]] {
                         let versionIds = versions.keys.sorted { Int($0)! < Int($1)! }
                         for versionId in versionIds {
-                            if let update = UpdateItem(version: Int(versionId)!, dbKey: dbKey, json: versions[versionId]!) {
+                            if let update = UpdateItem(version: Int(versionId)!, dbKey: "", json: versions[versionId]!) {
                                 updates.append(update)
                             } else {
                                 break
@@ -66,9 +81,15 @@ struct DbUpdater {
     }
     
     private func executeUpdate(_ update: UpdateItem) -> Bool {
-        if let dbAssets = try? DbStore.shared.getAsset(forKey: update.dbKey), dbAssets.fileExists {
+        var path = self.databaseFile
+        if path == nil {
+            if let dbAssets = try? DbStore.shared.getAsset(forKey: update.dbKey), dbAssets.fileExists {
+                path = dbAssets.path
+            }
+        }
+        if let path {
             do {
-                let db = try Database.open(dbAssets.path)
+                let db = try Database.open(path)
                 defer { db.close() }
                 for attach in update.attachments {
                     let attachmentAsset = try DbStore.shared.getAsset(forKey: attach)

@@ -274,7 +274,7 @@ public class Database {
     }
     
     private func sqliteError(message: String? = nil, query: String? = nil) -> SQLiteError {
-        var message = message ?? String(cString: sqlite3_errmsg(self.sqlite))
+        let message = message ?? String(cString: sqlite3_errmsg(self.sqlite))
         let error = SQLiteError(
             code: Int(sqlite3_errcode(self.sqlite)),
             message: message,
