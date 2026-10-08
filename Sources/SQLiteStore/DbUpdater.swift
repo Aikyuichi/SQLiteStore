@@ -7,19 +7,19 @@
 
 import Foundation
 
+/// Reads a JSON migration manifest and applies versioned SQLite changes.
 struct DbUpdater {
     private let databaseFile: String?
     private let updatesSource: String
     private let beforeUpdate: ((_ update: [String: Any?]) -> Void)?
     private let afterUpdate: ((_ update: [String: Any?], _ error: Error?) -> Void)?
     
+    /// Creates an updater that reads migration instructions from the supplied JSON file.
     init(databaseFile: String? = nil, updatesSource: String, beforeUpdate: ((_: [String : Any?]) -> Void)?, afterUpdate: ((_: [String : Any?], _: Error?) -> Void)?) {
         self.databaseFile = databaseFile
         self.updatesSource = updatesSource
-        self.beforeUpdate = beforeUpdate
-        self.afterUpdate = afterUpdate
-    }
     
+    /// Applies each migration in version order until the manifest is exhausted or a required update fails.
     func run() {
         let updates = self.getUpdates()
         if updates.isEmpty {
@@ -131,11 +131,13 @@ struct DbUpdater {
     }
 }
 
+/// Errors emitted when a migration payload is malformed or invalid for the current schema.
 enum UpdateError: Error {
     case invalidFormat
     case invalidVersion
 }
 
+/// A single versioned migration entry loaded from the update JSON document.
 private struct UpdateItem {
     let version: Int
     let dbKey: String
@@ -145,6 +147,7 @@ private struct UpdateItem {
     let optimize: Bool
     let skipOnError: Bool
     
+    /// Creates a migration item from a versioned JSON payload.
     init?(version: Int, dbKey: String, json: [String: Any]) {
         guard let commands = json["commands"] as? [String] else {
             #if DEBUG
@@ -162,6 +165,7 @@ private struct UpdateItem {
         
     }
     
+    /// Converts the migration item to a dictionary for callbacks and logging.
     func toDict() -> [String: Any] {
         return [
             "version": version,

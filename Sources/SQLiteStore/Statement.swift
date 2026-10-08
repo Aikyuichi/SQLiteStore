@@ -14,19 +14,23 @@ protocol Transaction {
     func rollback()
 }
 
+/// Wraps a compiled SQLite statement and provides a small API for binding values and reading results.
 public class Statement {
     private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     private let sqlite: OpaquePointer?
     private let errorHandler: ((SQLiteError) -> Void)?
     private var sqliteStatement: OpaquePointer? = nil
     private var resultColumns: [String: Int] = [:]
+    /// The trailing portion of the SQL that SQLite did not compile.
     public var uncompiledSql = ""
     
+    /// The SQL source associated with the prepared statement.
     public var query: String {
         guard let sqliteStatement else { return "" }
         return String(cString: sqlite3_sql(sqliteStatement))
     }
     
+    /// Returns the expanded SQL representation, if the platform exposes it.
     @available(iOS 10.0, *)
     public var expandedQuery: String {
         var expandedSql: String = ""
@@ -39,6 +43,7 @@ public class Statement {
         return expandedSql
     }
     
+    /// Returns the normalized SQL representation, when available on the platform.
     @available(macOS 12.0, *)
     @available(iOS 15.0, *)
     public var normalizedQuery: String {
@@ -46,6 +51,7 @@ public class Statement {
         return String(cString: sqlite3_normalized_sql(sqliteStatement))
     }
     
+    /// The number of columns returned by the statement.
     public var columnCount: Int {
         guard let sqliteStatement else { return 0 }
         return Int(sqlite3_column_count(sqliteStatement))
@@ -69,6 +75,7 @@ public class Statement {
         finalize()
     }
     
+    /// Advances the statement to the next row and returns whether a row is available.
     @discardableResult
     public func step() throws -> Bool {
         var result = false
@@ -86,6 +93,7 @@ public class Statement {
         return result
     }
     
+    /// Resets the statement so it can be executed again, optionally clearing bound values.
     public func reset(includingBindings: Bool = false) throws {
         if includingBindings {
             sqlite3_clear_bindings(self.sqliteStatement)
@@ -95,11 +103,13 @@ public class Statement {
         }
     }
     
+    /// Finalizes the underlying SQLite statement and releases its resources.
     public func finalize() {
         sqlite3_finalize(self.sqliteStatement)
         self.sqliteStatement = nil
     }
     
+    /// Binds positional values to the prepared statement.
     public func bind(parameters: [Any?]) throws {
         for i in 0..<parameters.count {
             let parameter = parameters[i]
@@ -107,12 +117,14 @@ public class Statement {
         }
     }
     
+    /// Binds named values to the prepared statement using SQLite parameter names.
     public func bind(parameters: [String: Any?]) throws {
         for parameter in parameters {
             try bind(value: parameter.value, forName: parameter.key)
         }
     }
     
+    /// Binds an integer value at a positional index.
     public func bind(int value: Int?, forIndex index: Int) throws {
         if let value = value {
             if sqlite3_bind_int64(self.sqliteStatement, Int32(index), Int64(value)) != SQLITE_OK {
@@ -123,6 +135,7 @@ public class Statement {
         }
     }
     
+    /// Binds a string value at a positional index.
     public func bind(string value: String?, forIndex index: Int) throws {
         if let stringValue = value {
             if sqlite3_bind_text(self.sqliteStatement, Int32(index), (stringValue as NSString).utf8String, -1, nil) != SQLITE_OK {
@@ -133,6 +146,7 @@ public class Statement {
         }
     }
     
+    /// Binds a floating-point value at a positional index.
     public func bind(double value: Double?, forIndex index: Int) throws {
         if let value = value {
             if sqlite3_bind_double(self.sqliteStatement, Int32(index), value) != SQLITE_OK {
@@ -143,6 +157,7 @@ public class Statement {
         }
     }
     
+    /// Binds a boolean value at a positional index.
     public func bind(bool value: Bool?, forIndex index: Int) throws {
         if let value = value {
             if sqlite3_bind_int(self.sqliteStatement, Int32(index), value ? 1 : 0) != SQLITE_OK {
@@ -153,6 +168,7 @@ public class Statement {
         }
     }
     
+    /// Binds a blob value at a positional index.
     public func bind(data value: Data?, forIndex index: Int) throws {
         if let value = value {
             let data = value as NSData
@@ -164,6 +180,7 @@ public class Statement {
         }
     }
     
+    /// Binds a value based on its runtime type at a positional index.
     public func bind(value: Any?, forIndex index: Int) throws {
         switch value {
         case let stringValue as String?:
@@ -181,36 +198,43 @@ public class Statement {
         }
     }
     
+    /// Binds an integer value to the parameter matching the supplied name.
     public func bind(int value: Int?, forName name: String) throws {
         let index = getBindIndex(forName: name)
         try bind(int: value, forIndex: index)
     }
     
+    /// Binds a string value to the parameter matching the supplied name.
     public func bind(string value: String?, forName name: String) throws {
         let index = getBindIndex(forName: name)
         try bind(string: value, forIndex: index)
     }
     
+    /// Binds a floating-point value to the parameter matching the supplied name.
     public func bind(double value: Double?, forName name: String) throws {
         let index = getBindIndex(forName: name)
         try bind(double: value, forIndex: index)
     }
     
+    /// Binds a boolean value to the parameter matching the supplied name.
     public func bind(bool value: Bool?, forName name: String) throws {
         let index = getBindIndex(forName: name)
         try bind(bool: value, forIndex: index)
     }
     
+    /// Binds a blob value to the parameter matching the supplied name.
     public func bind(data value: Data?, forName name: String) throws {
         let index = getBindIndex(forName: name)
         try bind(data: value, forIndex: index)
     }
     
+    /// Binds a value based on its runtime type to the matching named parameter.
     public func bind(value: Any?, forName name: String) throws {
         let index = getBindIndex(forName: name)
         try bind(value: value, forIndex: index)
     }
     
+    /// Fetches the next row as a dictionary keyed by column name.
     public func fetch() -> [String: Any?]? {
         if (try? step()) ?? false {
             var result: [String: Any?] = [:]
@@ -223,6 +247,7 @@ public class Statement {
         return nil
     }
     
+    /// Reads an integer value from the specified column index in the current row.
     public func getInt(forIndex index: Int) -> Int? {
         if isColumnNULL(forIndex: index) {
             return nil
@@ -231,6 +256,7 @@ public class Statement {
         }
     }
     
+    /// Reads a string value from the specified column index in the current row.
     public func getString(forIndex index: Int) -> String? {
         if isColumnNULL(forIndex: index) {
             return nil
@@ -239,6 +265,7 @@ public class Statement {
         }
     }
     
+    /// Reads a floating-point value from the specified column index in the current row.
     public func getDouble(forIndex index: Int) -> Double? {
         if isColumnNULL(forIndex: index) {
             return nil
@@ -247,6 +274,7 @@ public class Statement {
         }
     }
     
+    /// Reads a boolean value from the specified column index in the current row.
     public func getBool(forIndex index: Int) -> Bool? {
         if isColumnNULL(forIndex: index) {
             return nil
@@ -255,6 +283,7 @@ public class Statement {
         }
     }
     
+    /// Reads a blob value from the specified column index in the current row.
     public func getData(forIndex index: Int) -> Data? {
         if isColumnNULL(forIndex: index) {
             return nil
@@ -264,6 +293,7 @@ public class Statement {
         }
     }
     
+    /// Reads the value from the supplied column index using the column's SQLite type.
     public func getValue(forIndex index: Int) -> Any? {
         let dataType = sqlite3_column_type(self.sqliteStatement, Int32(index))
         switch dataType {
@@ -282,6 +312,7 @@ public class Statement {
         }
     }
     
+    /// Reads an integer value from the column matching the supplied name.
     public func getInt(forName name: String) -> Int? {
         if let index = self.resultColumns[name] {
             return getInt(forIndex: index)
@@ -290,6 +321,7 @@ public class Statement {
         }
     }
     
+    /// Reads a string value from the column matching the supplied name.
     public func getString(forName name: String) -> String? {
         if let index = self.resultColumns[name] {
             return getString(forIndex: index)
@@ -298,6 +330,7 @@ public class Statement {
         }
     }
     
+    /// Reads a floating-point value from the column matching the supplied name.
     public func getDouble(forName name: String) -> Double? {
         if let index = self.resultColumns[name] {
             return getDouble(forIndex: index)
@@ -306,6 +339,7 @@ public class Statement {
         }
     }
     
+    /// Reads a boolean value from the column matching the supplied name.
     public func getBool(forName name: String) -> Bool? {
         if let index = self.resultColumns[name] {
             return getBool(forIndex: index)
@@ -314,6 +348,7 @@ public class Statement {
         }
     }
     
+    /// Reads a blob value from the column matching the supplied name.
     public func getData(forName name: String) -> Data? {
         if let index = self.resultColumns[name] {
             return getData(forIndex: index)
@@ -322,6 +357,7 @@ public class Statement {
         }
     }
     
+    /// Reads the value from the column matching the supplied name.
     public func getValue(forName name: String) -> Any? {
         if let index = self.resultColumns[name] {
             return getValue(forIndex: index)
