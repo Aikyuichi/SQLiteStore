@@ -10,6 +10,7 @@
 import Foundation
 import SQLite3
 
+/// Describes a SQLite error with its numeric code and the SQL that triggered it.
 public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
     public let code: SQLiteCode
     public let message: String
@@ -32,6 +33,7 @@ public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
     }
 }
 
+/// A typed list of SQLite result codes used by `SQLiteError`.
 public enum SQLiteCode: Int {
     case SQLITE_OK = 0
     case SQLITE_ERROR = 1

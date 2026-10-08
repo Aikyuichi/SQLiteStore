@@ -3,6 +3,7 @@
 
 import PackageDescription
 
+/// Swift package manifest for the `SQLiteStore` library.
 let package = Package(
     name: "SQLiteStore",
     platforms: [

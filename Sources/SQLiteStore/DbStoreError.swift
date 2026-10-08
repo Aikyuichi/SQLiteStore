@@ -9,6 +9,7 @@
 
 import Foundation
 
+/// An error raised when a database asset or key is missing from the shared store.
 public struct DbStoreError: Error, CustomStringConvertible, LocalizedError {
     public let message: String
     public let description: String
