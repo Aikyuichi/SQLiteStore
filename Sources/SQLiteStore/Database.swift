@@ -334,18 +334,18 @@ extension Database {
     /// Runs the schema integrity check and returns the first rows of the report.
     public func checkIntegrity(ofSchema schema: String = "main", limit: Int = 100, quick: Bool = false) -> [[String: Any?]] {
         if quick {
-            return (try? select("PRAGMA \(schema).quick_check(\(limit)")) ?? []
+            return (try? select("PRAGMA \(schema).quick_check(\(limit))")) ?? []
         } else {
-            return (try? select("PRAGMA \(schema).integrity_check(\(limit)")) ?? []
+            return (try? select("PRAGMA \(schema).integrity_check(\(limit))")) ?? []
         }
     }
     
     /// Runs the integrity check for a table and returns any reported issues.
     public func checkIntegrity(ofTable table: String, inSchema schema: String = "main", quick: Bool = false) -> [[String: Any?]] {
         if quick {
-            return (try? select("PRAGMA \(schema).quick_check(\(table)")) ?? []
+            return (try? select("PRAGMA \(schema).quick_check(\(table))")) ?? []
         } else {
-            return (try? select("PRAGMA \(schema).integrity_check(\(table)")) ?? []
+            return (try? select("PRAGMA \(schema).integrity_check(\(table))")) ?? []
         }
     }
     
@@ -367,7 +367,7 @@ extension Database {
     
     /// Returns the index list for a table in the requested schema.
     public func getIndexes(ofTable table: String, inSchema schema: String = "main") -> [[String: Any?]] {
-        return (try? select("PRAGMA \(schema).index_list(\(table)")) ?? []
+        return (try? select("PRAGMA \(schema).index_list(\(table))")) ?? []
     }
     
     /// Returns index metadata for the named index in the selected schema.
